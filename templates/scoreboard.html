@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <button class="theme-toggle" id="themeToggle">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    <div class="header">
+        <h1>Quiz Results</h1>
+    </div>
+    
+    <div class="container">
+        <div class="scoreboard">
+            <div class="score-container">
+                <div class="score">
+                    Your Score: {{ score }}/{{ total }}
+                </div>
+                <div class="score-percentage">
+                    ({{ "%.1f"|format(score/total*100) }}%)
+                </div>
+            </div>
+            
+            <div class="results">
+                {% for answer in user_answers %}
+                <div class="result-item {% if answer.user_answer == answer.correct_answer %}correct{% else %}incorrect{% endif %}">
+                    <h3>Question {{ loop.index }}</h3>
+                    <p>{{ answer.question }}</p>
+                    
+                    <div class="options">
+                        {% for option in answer.options %}
+                        <div class="option {% if option == answer.correct_answer %}correct-answer{% elif option == answer.user_answer and option != answer.correct_answer %}wrong-answer{% endif %}">
+                            {{ option }}
+                            {% if option == answer.correct_answer %}
+                                <span class="correct-label"><i class="fas fa-check-circle"></i> Correct Answer</span>
+                            {% elif option == answer.user_answer and option != answer.correct_answer %}
+                                <span class="user-label"><i class="fas fa-times-circle"></i> Your Answer</span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <button class="explanation-btn" 
+                            data-question="{{ answer.question }}" 
+                            data-correct="{{ answer.correct_answer }}"
+                            data-index="{{ loop.index0 }}">
+                        <i class="fas fa-lightbulb"></i>
+                        Show Explanation
+                    </button>
+                    
+                    <div id="explanation-{{ loop.index0 }}" class="explanation-container">
+                        <!-- Explanation will be loaded here -->
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="actions">
+                <a href="{{ url_for('download_file', filename='results.pdf') }}" class="btn">
+                    <i class="fas fa-file-pdf"></i> Download Results PDF
+                </a>
+                <button id="downloadNotesBtn" class="btn btn-download-notes">
+                    <i class="fas fa-book"></i> Download Short Notes
+                </button>
+                <a href="{{ url_for('index') }}" class="btn">
+                    <i class="fas fa-redo"></i> Take Another Quiz
+                </a>
+            </div>
+            <div id="statusMessage" class="loading"></div>
+        </div>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const icon = themeToggle.querySelector('i');
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+
+        // Explanation button functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.explanation-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const container = document.getElementById(`explanation-${this.dataset.index}`);
+                    const question = this.dataset.question;
+                    const correctAnswer = this.dataset.correct;
+                    
+                    // Show loading state
+                    container.innerHTML = '<p class="loading"><i class="fas fa-spinner fa-spin"></i> Loading explanation...</p>';
+                    container.classList.add('show');
+                    
+                    try {
+                        const response = await fetch('/get_reasoning', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                question: question,
+                                correct_answer: correctAnswer
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        
+                        const data = await response.json();
+                        
+                        if (data.status === 'success') {
+                            container.innerHTML = `
+                                <h4><i class="fas fa-info-circle"></i> Explanation</h4>
+                                <p>${data.reasoning}</p>
+                                <button class="explanation-btn" onclick="this.parentElement.classList.remove('show')">
+                                    <i class="fas fa-times"></i> Close
+                                </button>
+                            `;
+                        } else {
+                            container.innerHTML = `<p><i class="fas fa-exclamation-circle"></i> Error: ${data.error || 'Unknown error occurred'}</p>`;
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        container.innerHTML = `<p><i class="fas fa-exclamation-circle"></i> Failed to load explanation. Please try again.</p>`;
+                    }
+                });
+            });
+
+            // Download Notes button functionality
+            document.getElementById('downloadNotesBtn').addEventListener('click', async function() {
+                const btn = this;
+                const statusEl = document.getElementById('statusMessage');
+                
+                btn.disabled = true;
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating comprehensive study notes...';
+                
+                try {
+                    const response = await fetch('/generate_notes', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Notes generated successfully! Downloading...';
+                        window.location.href = `/download/${data.notes_path}`;
+                    } else {
+                        statusEl.innerHTML = `<i class="fas fa-exclamation-circle"></i> Error: ${data.error || 'Failed to generate notes'}`;
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    statusEl.innerHTML = `<i class="fas fa-exclamation-circle"></i> Error: ${error.message}`;
+                } finally {
+                    btn.disabled = false;
+                    setTimeout(() => {
+                        statusEl.innerHTML = '';
+                    }, 5000);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

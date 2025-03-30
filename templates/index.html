@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Quiz Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <button class="theme-toggle" id="themeToggle">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    <div class="header">
+        <h1>AI Quiz Generator</h1>
+    </div>
+    
+    <div class="container">
+        <div class="form-container">
+            <h2>Generate Your Quiz</h2>
+            <form action="{{ url_for('generate') }}" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="topic">Enter a Topic:</label>
+                    <input type="text" id="topic" name="topic" placeholder="e.g., Python Programming, World History">
+                </div>
+                
+                <div class="form-group">
+                    <label for="file">Or Upload a File:</label>
+                    <input type="file" id="file" name="file" accept=".pdf,.txt,.docx">
+                    <small>Supported formats: PDF, TXT, DOCX</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Select Difficulty:</label>
+                    <div class="difficulty-selector">
+                        <button type="button" class="difficulty-btn active" data-difficulty="easy">
+                            <i class="fas fa-star"></i> Easy
+                        </button>
+                        <button type="button" class="difficulty-btn" data-difficulty="intermediate">
+                            <i class="fas fa-star-half-alt"></i> Intermediate
+                        </button>
+                        <button type="button" class="difficulty-btn" data-difficulty="hard">
+                            <i class="fas fa-stars"></i> Hard
+                        </button>
+                    </div>
+                    <input type="hidden" name="difficulty" id="difficultyInput" value="easy">
+                </div>
+                
+                <div class="form-group">
+                    <label for="num_questions">Number of Questions:</label>
+                    <input type="number" id="num_questions" name="num_questions" min="1" max="20" value="5" required>
+                </div>
+                
+                <button type="submit" class="btn">
+                    <i class="fas fa-magic"></i> Generate Quiz
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const icon = themeToggle.querySelector('i');
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+
+        // Difficulty selector functionality
+        const difficultyBtns = document.querySelectorAll('.difficulty-btn');
+        const difficultyInput = document.getElementById('difficultyInput');
+
+        difficultyBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove active class from all buttons
+                difficultyBtns.forEach(b => b.classList.remove('active'));
+                // Add active class to clicked button
+                btn.classList.add('active');
+                // Update hidden input
+                difficultyInput.value = btn.dataset.difficulty;
+            });
+        });
+    </script>
+</body>
+</html>

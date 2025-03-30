@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quiz</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <button class="theme-toggle" id="themeToggle">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    <div class="header">
+        <h1>Quiz</h1>
+        <div class="quiz-progress">
+            <div class="progress-bar">
+                <div class="progress" id="quizProgress"></div>
+            </div>
+            <div class="progress-info">
+                <span class="progress-text">Question <span id="currentQuestion">1</span> of {{ questions|length }}</span>
+                <span class="bookmarked-count" id="bookmarkedCount">0 bookmarked</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="quiz-container">
+            <form method="post" id="quizForm">
+                {% for i, question in enumerate(questions) %}
+                <div class="question" id="question-{{ i }}" {% if i != 0 %}style="display: none;"{% endif %}>
+                    <div class="question-header">
+                        <div class="question-title">
+                            <h3>Question {{ i + 1 }}</h3>
+                            <button type="button" class="bookmark-btn" onclick="toggleBookmark({{ i }})" id="bookmark-{{ i }}">
+                                <i class="far fa-bookmark"></i>
+                            </button>
+                        </div>
+                        <div class="question-timer">
+                            <i class="fas fa-clock"></i>
+                            <span id="timer-{{ i }}">30</span>s
+                        </div>
+                    </div>
+                    <p class="question-text">{{ question.question }}</p>
+                    
+                    <div class="options">
+                        {% for option in question.options %}
+                        <label class="option">
+                            <input type="radio" name="question_{{ i }}" value="{{ option }}" required>
+                            <span class="option-text">{{ option }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="question-navigation">
+                        {% if i > 0 %}
+                        <button type="button" class="btn btn-secondary" onclick="showQuestion({{ i-1 }})">
+                            <i class="fas fa-arrow-left"></i> Previous
+                        </button>
+                        {% endif %}
+                        
+                        <div class="nav-buttons">
+                            {% if i < questions|length - 1 %}
+                            <button type="button" class="btn btn-warning" onclick="skipQuestion({{ i }})">
+                                <i class="fas fa-forward"></i> Skip
+                            </button>
+                            <button type="button" class="btn" onclick="showQuestion({{ i+1 }})">
+                                Next <i class="fas fa-arrow-right"></i>
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn" onclick="showReviewModal()">
+                                <i class="fas fa-eye"></i> Review Answers
+                            </button>
+                            <button type="submit" class="btn" id="submitBtn" style="display: none;">
+                                <i class="fas fa-check"></i> Submit Quiz
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div class="modal" id="reviewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Review Your Answers</h2>
+                <button class="close-btn" onclick="closeReviewModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="review-questions">
+                    {% for i, question in enumerate(questions) %}
+                    <div class="review-question" id="review-question-{{ i }}">
+                        <div class="review-question-header">
+                            <h3>Question {{ i + 1 }}</h3>
+                            <div class="question-status">
+                                <span class="status-skipped" id="status-skipped-{{ i }}" style="display: none;">
+                                    <i class="fas fa-forward"></i> Skipped
+                                </span>
+                                <span class="status-bookmarked" id="status-bookmarked-{{ i }}" style="display: none;">
+                                    <i class="fas fa-bookmark"></i> Bookmarked
+                                </span>
+                            </div>
+                        </div>
+                        <p>{{ question.question }}</p>
+                        <div class="review-options">
+                            {% for option in question.options %}
+                            <div class="review-option" data-question="{{ i }}" data-option="{{ option }}">
+                                <input type="radio" name="review_question_{{ i }}" value="{{ option }}" 
+                                       onchange="updateAnswer({{ i }}, '{{ option }}')">
+                                <span class="option-text">{{ option }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeReviewModal()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="btn" onclick="submitQuiz()">
+                    <i class="fas fa-check"></i> Submit Quiz
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const icon = themeToggle.querySelector('i');
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+
+        function updateThemeIcon(theme) {
+            icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
+        }
+
+        // Quiz functionality
+        let currentQuestion = 0;
+        const totalQuestions = {{ questions|length }};
+        const timers = {};
+        const skippedQuestions = new Set();
+        const bookmarkedQuestions = new Set();
+
+        // Load saved state
+        function loadSavedState() {
+            const savedSkipped = localStorage.getItem('skippedQuestions');
+            const savedBookmarked = localStorage.getItem('bookmarkedQuestions');
+            if (savedSkipped) skippedQuestions.add(...JSON.parse(savedSkipped));
+            if (savedBookmarked) bookmarkedQuestions.add(...JSON.parse(savedBookmarked));
+            updateBookmarkCount();
+            updateQuestionStatuses();
+        }
+
+        // Save state
+        function saveState() {
+            localStorage.setItem('skippedQuestions', JSON.stringify([...skippedQuestions]));
+            localStorage.setItem('bookmarkedQuestions', JSON.stringify([...bookmarkedQuestions]));
+        }
+
+        function updateProgress() {
+            const progress = ((currentQuestion + 1) / totalQuestions) * 100;
+            document.getElementById('quizProgress').style.width = `${progress}%`;
+            document.getElementById('currentQuestion').textContent = currentQuestion + 1;
+        }
+
+        function showQuestion(index) {
+            document.querySelectorAll('.question').forEach(q => q.style.display = 'none');
+            document.getElementById(`question-${index}`).style.display = 'block';
+            currentQuestion = index;
+            updateProgress();
+            updateQuestionStatuses();
+            startTimer(index);
+        }
+
+        function skipQuestion(index) {
+            skippedQuestions.add(index);
+            saveState();
+            updateQuestionStatuses();
+            
+            // Show next question if available
+            if (index < totalQuestions - 1) {
+                showQuestion(index + 1);
+            }
+        }
+
+        function toggleBookmark(index) {
+            const bookmarkBtn = document.getElementById(`bookmark-${index}`);
+            if (bookmarkedQuestions.has(index)) {
+                bookmarkedQuestions.delete(index);
+                bookmarkBtn.querySelector('i').className = 'far fa-bookmark';
+            } else {
+                bookmarkedQuestions.add(index);
+                bookmarkBtn.querySelector('i').className = 'fas fa-bookmark';
+            }
+            saveState();
+            updateBookmarkCount();
+            updateQuestionStatuses();
+        }
+
+        function updateBookmarkCount() {
+            document.getElementById('bookmarkedCount').textContent = 
+                `${bookmarkedQuestions.size} bookmarked`;
+        }
+
+        function updateQuestionStatuses() {
+            // Update review modal status indicators
+            for (let i = 0; i < totalQuestions; i++) {
+                const skippedStatus = document.getElementById(`status-skipped-${i}`);
+                const bookmarkedStatus = document.getElementById(`status-bookmarked-${i}`);
+                
+                if (skippedStatus) skippedStatus.style.display = 
+                    skippedQuestions.has(i) ? 'inline' : 'none';
+                if (bookmarkedStatus) bookmarkedStatus.style.display = 
+                    bookmarkedQuestions.has(i) ? 'inline' : 'none';
+            }
+        }
+
+        // Timer functionality
+        function startTimer(questionIndex) {
+            if (timers[questionIndex]) {
+                clearInterval(timers[questionIndex]);
+            }
+
+            let timeLeft = 30;
+            const timerElement = document.getElementById(`timer-${questionIndex}`);
+            
+            timers[questionIndex] = setInterval(() => {
+                timeLeft--;
+                timerElement.textContent = timeLeft;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timers[questionIndex]);
+                    if (currentQuestion < totalQuestions - 1) {
+                        showQuestion(currentQuestion + 1);
+                    }
+                }
+            }, 1000);
+        }
+
+        // Start timer for first question
+        startTimer(0);
+
+        // Load saved state when page loads
+        loadSavedState();
+
+        // Review Modal functionality
+        function showReviewModal() {
+            const modal = document.getElementById('reviewModal');
+            modal.style.display = 'flex';
+            
+            // Set current answers in review modal
+            document.querySelectorAll('input[type="radio"]:checked').forEach(radio => {
+                const questionIndex = radio.name.split('_')[1];
+                const reviewRadio = document.querySelector(`input[name="review_question_${questionIndex}"][value="${radio.value}"]`);
+                if (reviewRadio) {
+                    reviewRadio.checked = true;
+                }
+            });
+        }
+
+        function closeReviewModal() {
+            const modal = document.getElementById('reviewModal');
+            modal.style.display = 'none';
+        }
+
+        function updateAnswer(questionIndex, option) {
+            // Update the main quiz form
+            const mainRadio = document.querySelector(`input[name="question_${questionIndex}"][value="${option}"]`);
+            if (mainRadio) {
+                mainRadio.checked = true;
+            }
+        }
+
+        function submitQuiz() {
+            // Clear all timers
+            Object.values(timers).forEach(timer => clearInterval(timer));
+            document.getElementById('quizForm').submit();
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('reviewModal');
+            if (event.target === modal) {
+                closeReviewModal();
+            }
+        }
+    </script>
+</body>
+</html>
