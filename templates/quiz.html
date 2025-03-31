@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quiz</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Quiz</h1>
+        <div class="header-actions">
+            <div class="header-actions-left">
+                <a href="{{ url_for('home') }}" class="home-btn">
+                    <i class="fas fa-home"></i>
+                </a>
+                <div class="quiz-timer">
+                    <i class="fas fa-clock"></i>
+                    <span id="totalTimer">3:00</span>
+                </div>
+            </div>
+            <div class="header-actions-right">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="quiz-container">
+            <div class="progress-bar">
+                <div class="progress" style="width: 0%"></div>
+            </div>
+
+            <form id="quizForm" action="{{ url_for('quiz') }}" method="post">
+                {% set question_counter = namespace(value=0) %}
+                {% for question in questions %}
+                {% set question_counter.value = question_counter.value + 1 %}
+                <div class="question" id="question-{{ question_counter.value }}">
+                    <div class="question-header">
+                        <h3>Question {{ question_counter.value }}</h3>
+                    </div>
+                    <p class="question-text">{{ question.question }}</p>
+                    <div class="options">
+                        {% for option in question.options %}
+                        <label class="option">
+                            <input type="radio" name="question_{{ question_counter.value - 1 }}" value="{{ option }}">
+                            <span class="option-text">{{ option }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div class="question-actions">
+                        <button type="button" class="action-btn bookmark-btn" onclick="toggleBookmark({{ question_counter.value - 1 }})">
+                            <i class="far fa-bookmark"></i>
+                            <span>Bookmark</span>
+                        </button>
+                        <button type="button" class="action-btn skip-btn" onclick="skipQuestion({{ question_counter.value - 1 }})">
+                            <i class="fas fa-forward"></i>
+                            <span>Skip</span>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <div class="quiz-navigation">
+                    <button type="button" class="nav-btn prev-btn" disabled>
+                        <i class="fas fa-arrow-left"></i> Previous
+                    </button>
+                    <button type="button" class="nav-btn next-btn">
+                        Next <i class="fas fa-arrow-right"></i>
+                    </button>
+                    <button type="button" class="nav-btn review-btn" onclick="showReviewModal()" style="display: none;">
+                        <i class="fas fa-eye"></i> Review to Submit
+                    </button>
+                    <button type="submit" class="submit-btn" style="display: none;">
+                        <i class="fas fa-check"></i> Submit Quiz
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div class="modal" id="reviewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Review Your Answers</h2>
+                <button class="close-btn" onclick="closeReviewModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="review-questions">
+                    {% for i, question in enumerate(questions) %}
+                    <div class="review-question" id="review-question-{{ i }}">
+                        <div class="review-question-header">
+                            <h3>Question {{ i + 1 }}</h3>
+                            <div class="question-status">
+                                <span class="status-skipped" id="status-skipped-{{ i }}" style="display: none;">
+                                    <i class="fas fa-forward"></i> Skipped
+                                </span>
+                                <span class="status-bookmarked" id="status-bookmarked-{{ i }}" style="display: none;">
+                                    <i class="fas fa-bookmark"></i> Bookmarked
+                                </span>
+                            </div>
+                        </div>
+                        <p>{{ question.question }}</p>
+                        <div class="review-options">
+                            {% for option in question.options %}
+                            <div class="review-option" data-question="{{ i }}" data-option="{{ option }}">
+                                <input type="radio" name="review_question_{{ i }}" value="{{ option }}" 
+                                       onchange="updateAnswer({{ i }}, '{{ option }}')">
+                                <span class="option-text">{{ option }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="nav-btn" onclick="closeReviewModal()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="nav-btn" onclick="submitQuiz()">
+                    <i class="fas fa-check"></i> Submit Quiz
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Explanation Modal -->
+    <div class="modal" id="explanationModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Explanation</h2>
+                <button class="close-btn" onclick="closeExplanationModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="explanationContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.querySelector('.theme-toggle i');
+            
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.setAttribute('data-theme', 'dark');
+            document.querySelector('.theme-toggle i').classList.replace('fa-moon', 'fa-sun');
+        }
+
+        // Quiz navigation and timer
+        const questions = document.querySelectorAll('.question');
+        const prevBtn = document.querySelector('.prev-btn');
+        const nextBtn = document.querySelector('.next-btn');
+        const reviewBtn = document.querySelector('.review-btn');
+        const submitBtn = document.querySelector('.submit-btn');
+        const progressBar = document.querySelector('.progress');
+        const totalTimer = document.getElementById('totalTimer');
+        let currentQuestion = 0;
+        let skippedQuestions = new Set();
+        let bookmarkedQuestions = new Set();
+
+        // Timer functionality
+        const totalQuestions = {{ questions|length }};
+        const timePerQuestion = 30; // 30 seconds per question
+        let totalTimeLeft = totalQuestions * timePerQuestion;
+        let quizTimer;
+
+        function updateTimer() {
+            const minutes = Math.floor(totalTimeLeft / 60);
+            const seconds = totalTimeLeft % 60;
+            totalTimer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            // Vibrate when in last minute
+            if (minutes === 0 && seconds > 0) {
+                if (navigator.vibrate) {
+                    navigator.vibrate(200); // Vibrate for 200ms
+                }
+            }
+            
+            if (totalTimeLeft <= 0) {
+                clearInterval(quizTimer);
+                totalTimer.classList.add('expired');
+                totalTimer.textContent = 'Time\'s Up!';
+                submitQuiz();
+            }
+            
+            totalTimeLeft--;
+        }
+
+        function startQuizTimer() {
+            updateTimer();
+            quizTimer = setInterval(updateTimer, 1000);
+        }
+
+        function submitQuiz() {
+            clearInterval(quizTimer);
+            document.getElementById('quizForm').submit();
+        }
+
+        function showQuestion(index) {
+            questions.forEach(q => q.style.display = 'none');
+            questions[index].style.display = 'block';
+            
+            // Update progress bar
+            const progress = ((index + 1) / questions.length) * 100;
+            progressBar.style.width = `${progress}%`;
+            
+            // Update navigation buttons
+            prevBtn.disabled = index === 0;
+            
+            // Show/hide next button and review button based on question index
+            if (index === questions.length - 1) {
+                nextBtn.style.display = 'none';
+                reviewBtn.style.display = 'block';
+                reviewBtn.innerHTML = '<i class="fas fa-eye"></i> Review to Submit';
+            } else {
+                nextBtn.style.display = 'block';
+                reviewBtn.style.display = 'none';
+            }
+            
+            submitBtn.style.display = 'none';
+
+            // Update bookmark button state
+            const bookmarkBtn = questions[index].querySelector('.bookmark-btn');
+            if (bookmarkBtn) {
+                const icon = bookmarkBtn.querySelector('i');
+                icon.className = bookmarkedQuestions.has(index) ? 'fas fa-bookmark' : 'far fa-bookmark';
+            }
+        }
+
+        function toggleBookmark(index) {
+            const bookmarkBtn = questions[index].querySelector('.bookmark-btn');
+            const icon = bookmarkBtn.querySelector('i');
+            
+            if (bookmarkedQuestions.has(index)) {
+                bookmarkedQuestions.delete(index);
+                icon.className = 'far fa-bookmark';
+            } else {
+                bookmarkedQuestions.add(index);
+                icon.className = 'fas fa-bookmark';
+            }
+            
+            // Update status in review modal
+            const statusBookmarked = document.getElementById(`status-bookmarked-${index}`);
+            if (statusBookmarked) {
+                statusBookmarked.style.display = bookmarkedQuestions.has(index) ? 'block' : 'none';
+            }
+        }
+
+        function skipQuestion(index) {
+            skippedQuestions.add(index);
+            
+            // Update status in review modal
+            const statusSkipped = document.getElementById(`status-skipped-${index}`);
+            if (statusSkipped) {
+                statusSkipped.style.display = 'block';
+            }
+            
+            // Move to next question if available
+            if (index < questions.length - 1) {
+                currentQuestion = index + 1;
+                showQuestion(currentQuestion);
+            }
+        }
+
+        prevBtn.addEventListener('click', () => {
+            if (currentQuestion > 0) {
+                currentQuestion--;
+                showQuestion(currentQuestion);
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentQuestion < questions.length - 1) {
+                currentQuestion++;
+                showQuestion(currentQuestion);
+            }
+        });
+
+        // Review Modal functionality
+        function updateAnswer(questionIndex, option) {
+            // Update the main quiz form
+            const mainRadio = document.querySelector(`input[name="question_${questionIndex}"]`);
+            if (mainRadio) {
+                mainRadio.value = option;
+                mainRadio.checked = true;
+            }
+        }
+
+        function showReviewModal() {
+            const modal = document.getElementById('reviewModal');
+            modal.style.display = 'flex';
+            
+            // Set current answers in review modal
+            questions.forEach((question, index) => {
+                const selectedRadio = question.querySelector('input[type="radio"]:checked');
+                if (selectedRadio) {
+                    const selectedOption = selectedRadio.value;
+                    
+                    // Find and check the corresponding radio in the review modal
+                    const reviewRadio = document.querySelector(`input[name="review_question_${index}"][value="${selectedOption}"]`);
+                    if (reviewRadio) {
+                        reviewRadio.checked = true;
+                    }
+                }
+            });
+
+            // Show submit button in review modal
+            const submitBtn = document.querySelector('.modal-footer .nav-btn:last-child');
+            submitBtn.style.display = 'block';
+        }
+
+        function closeReviewModal() {
+            const modal = document.getElementById('reviewModal');
+            modal.style.display = 'none';
+        }
+
+        // Explanation Modal functionality
+        function showExplanation(explanation) {
+            const modal = document.getElementById('explanationModal');
+            const content = document.getElementById('explanationContent');
+            content.innerHTML = explanation;
+            modal.style.display = 'flex';
+        }
+
+        function closeExplanationModal() {
+            const modal = document.getElementById('explanationModal');
+            modal.style.display = 'none';
+        }
+
+        // Update the window click handler to handle both modals
+        window.onclick = function(event) {
+            const reviewModal = document.getElementById('reviewModal');
+            const explanationModal = document.getElementById('explanationModal');
+            if (event.target === reviewModal) {
+                closeReviewModal();
+            } else if (event.target === explanationModal) {
+                closeExplanationModal();
+            }
+        }
+
+        // Initialize quiz
+        showQuestion(0);
+        startQuizTimer();
+</script>
+</body>
+</html>
