@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MCQ Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header class="header">
+        <h1>Quiz Generator</h1>
+        <div class="header-actions">
+            <a href="{{ url_for('index') }}" class="home-btn">
+                <i class="fas fa-home"></i>
+            </a>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <i class="fas fa-moon"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="quiz-generator">
+            <h2></h2>
+            <form action="{{ url_for('generate') }}" method="post" enctype="multipart/form-data" onsubmit="handleSubmit(event)">
+                <div class="input-group">
+                    <div class="input-container">
+                        <input type="text" name="topic" placeholder="Enter topic📝  OR  Upload file📂">
+                        <div class="input-helper"></div>
+                    </div>
+                    <div class="upload-container">
+                        <input type="file" id="file" name="file" accept=".pdf,.txt,.docx" onchange="updateFileName(this)">
+                        <label for="file" class="upload-btn">
+                            <i class="fas fa-upload"></i>
+                            Upload File
+                        </label>
+                        <div class="file-name-container" style="display: none;">
+                            <span class="file-name"></span>
+                            <button type="button" class="remove-file" onclick="removeFile()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="num_questions">Number of Questions:</label>
+                    <input type="number" id="num_questions" name="num_questions" min="1" max="20" value="5" required>
+                </div>
+
+                <div class="difficulty-selector">
+                    <button type="button" class="difficulty-btn active" data-difficulty="easy">Easy</button>
+                    <button type="button" class="difficulty-btn" data-difficulty="intermediate">Intermediate</button>
+                    <button type="button" class="difficulty-btn" data-difficulty="hard">Hard</button>
+                    <input type="hidden" name="difficulty" value="easy">
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-magic"></i> Generate Quiz
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.querySelector('.theme-toggle i');
+            
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            document.body.setAttribute('data-theme', 'dark');
+            document.querySelector('.theme-toggle i').classList.replace('fa-moon', 'fa-sun');
+        }
+
+        // Difficulty selector functionality
+        const difficultyBtns = document.querySelectorAll('.difficulty-btn');
+        const difficultyInput = document.querySelector('input[name="difficulty"]');
+
+        difficultyBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                difficultyBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                difficultyInput.value = btn.dataset.difficulty;
+            });
+        });
+
+        function handleSubmit(event) {
+            event.preventDefault();
+            
+            const fileInput = document.getElementById('file');
+            const topicInput = document.querySelector('input[name="topic"]');
+            const numQuestions = document.getElementById('num_questions').value;
+            
+            // Check if neither file nor topic is provided
+            if (!fileInput.files.length && !topicInput.value.trim()) {
+                showNotification('Enter Input to Generate Quiz', 'error');
+                return;
+            }
+            
+            // Check if number of questions is valid
+            if (!numQuestions || numQuestions < 1) {
+                showNotification('Please enter a valid number of questions', 'error');
+                return;
+            }
+            
+            // Show loading notification
+            showNotification('Generating Quiz...', 'info');
+            
+            // If validation passes, submit the form
+            event.target.submit();
+        }
+
+        function showNotification(message, type = 'info') {
+            // Remove any existing notifications
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(notification => notification.remove());
+            
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Remove notification after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // File upload functionality
+        function updateFileName(input) {
+            const fileName = input.files[0]?.name;
+            if (fileName) {
+                const fileContainer = document.querySelector('.file-name-container');
+                const fileNameSpan = document.querySelector('.file-name');
+                const uploadBtn = input.nextElementSibling;
+                
+                // Show the file name container
+                fileContainer.style.display = 'flex';
+                
+                // Update the file name
+                fileNameSpan.textContent = fileName;
+                
+                // Update the upload button text
+                uploadBtn.innerHTML = `<i class="fas fa-file"></i> ${fileName}`;
+                showNotification('File uploaded successfully', 'success');
+            }
+        }
+
+        function removeFile() {
+            const fileInput = document.getElementById('file');
+            const fileContainer = document.querySelector('.file-name-container');
+            const uploadBtn = fileInput.nextElementSibling;
+            
+            // Clear the file input
+            fileInput.value = '';
+            
+            // Hide the file name container
+            fileContainer.style.display = 'none';
+            
+            // Reset the upload button text
+            uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload File';
+            
+            showNotification('File removed', 'info');
+        }
+    </script>
+</body>
+</html>
+
